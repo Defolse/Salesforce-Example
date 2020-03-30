@@ -1,0 +1,58 @@
+global class AssociateBookScheduleJobs implements Schedulable, Database.Batchable<sObject> {
+	
+    
+    global Database.QueryLocator start(Database.BatchableContext bc) {
+        return Database.getQueryLocator('SELECT id, Name, Author__c FROM Book__c WHERE Author__c != null');
+    }
+
+    
+    global void execute(Database.BatchableContext BC, List<sObject> new_books){
+        List<Writer__c> all_author = [SELECT id, Name FROM Writer__c];
+        List<BooksToWriter__c> lookup_beetwen_book_and_author = new List<BooksToWriter__c>();
+        List<Book__c> books_need_create_author = new List<Book__c>();
+        List<Writer__c> new_author = new List<Writer__c>();
+        Set<String> set_new_author_name = new Set<String>();
+        for(sObject single_book : new_books){
+            Book__c a = (Book__c) single_book;
+            List<String> split_name = a.Author__c.split('\\, | \\; ');
+            for(String splited : split_name){
+                boolean is_author_exist = false;
+                splited = splited.trim();
+            	for(Writer__c e: all_author){
+                	if(splited.equals(e.Name)){
+                    	lookup_beetwen_book_and_author.add(new BooksToWriter__c(Books__c = a.id, Writers__c = e.id));
+                    	is_author_exist = true;
+                	}
+            	}
+            
+            	if(!is_author_exist){
+                	books_need_create_author.add(a);
+                	new_author.add(new Writer__c(Name = splited));
+                	set_new_author_name.add(splited);
+            	}
+            }
+        }
+        insert new_author;
+        
+        List<Writer__c> created_author = [SELECT id, Name FROM Writer__c WHERE Name IN :set_new_author_name];
+        for(Book__c a : books_need_create_author){
+            for(Writer__c e: created_author){
+                if(a.Name == e.Name){
+                    lookup_beetwen_book_and_author.add(new BooksToWriter__c(Books__c = a.id, Writers__c = e.id));
+                }
+            }
+        }
+        insert lookup_beetwen_book_and_author;
+    }
+    
+
+    
+    global void finish(Database.BatchableContext BC){
+        
+        
+    }
+	
+    global void execute(SchedulableContext sc){
+    	Database.executeBatch(this);    
+	}
+}
